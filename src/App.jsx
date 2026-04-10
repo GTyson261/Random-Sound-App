@@ -8,57 +8,65 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [favorites, setFavorites] = useState(() => {
-    const saved = localStorage.getItem("favoriteSounds");
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem("favoriteSounds");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
   const [isPlaying, setIsPlaying] = useState(false);
 
   const audioRef = useRef(null);
 
+  const getPreviewUrl = (item) => {
+    if (!item || !item.previews) return "";
+    return (
+      item.previews["preview-hq-mp3"] ||
+      item.previews["preview-lq-mp3"] ||
+      ""
+    );
+  };
+
   const fetchSound = async () => {
     try {
       setLoading(true);
       setError("");
+      setIsPlaying(false);
 
       const url =
         `https://freesound.org/apiv2/search/text/` +
         `?query=ambient` +
-        `&fields=name,username,previews,id` +
+        `&fields=id,name,username,previews` +
         `&page_size=20` +
         `&token=${API_KEY}`;
 
-      const res = await fetch(url);
+      const response = await fetch(url);
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}: ${text}`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`HTTP ${response.status}: ${text}`);
       }
 
-      const data = await res.json();
+      const data = await response.json();
 
       if (!data.results || data.results.length === 0) {
         throw new Error("No sounds found.");
       }
 
-      const validSounds = data.results.filter(
-        (item) =>
-          item &&
-          item.previews &&
-          (item.previews["preview-hq-mp3"] || item.previews["preview-lq-mp3"])
-      );
+      const playableSounds = data.results.filter((item) => getPreviewUrl(item));
 
-      if (validSounds.length === 0) {
-        throw new Error("No playable preview found.");
+      if (playableSounds.length === 0) {
+        throw new Error("No playable sound previews found.");
       }
 
-      const random =
-        validSounds[Math.floor(Math.random() * validSounds.length)];
+      const randomIndex = Math.floor(Math.random() * playableSounds.length);
+      const randomSound = playableSounds[randomIndex];
 
-      setSound(random);
-      setIsPlaying(false);
+      setSound(randomSound);
     } catch (err) {
       setSound(null);
-      setError(err.message || "Failed to load sound.");
+      setError(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
     }
@@ -67,37 +75,43 @@ function App() {
   const saveFavorite = () => {
     if (!sound) return;
 
-    const alreadySaved = favorites.some((item) => item.id === sound.id);
-    if (alreadySaved) return;
+    setFavorites((prev) => {
+      const exists = prev.some((item) => item.id === sound.id);
+      if (exists) return prev;
 
-    const updated = [...favorites, sound];
-    setFavorites(updated);
-    localStorage.setItem("favoriteSounds", JSON.stringify(updated));
+      const updated = [...prev, sound];
+      localStorage.setItem("favoriteSounds", JSON.stringify(updated));
+      return updated;
+    });
   };
 
-  const playFavorite = (savedSound) => {
-    setSound(savedSound);
+  const playFavorite = (favorite) => {
+    setSound(favorite);
     setIsPlaying(false);
+    setError("");
 
     setTimeout(() => {
       if (audioRef.current) {
-        audioRef.current.play();
+        audioRef.current.play().catch(() => {
+          setError("Click play to start audio.");
+        });
       }
     }, 100);
   };
 
   const removeFavorite = (id) => {
-    const updated = favorites.filter((item) => item.id !== id);
-    setFavorites(updated);
-    localStorage.setItem("favoriteSounds", JSON.stringify(updated));
+    setFavorites((prev) => {
+      const updated = prev.filter((item) => item.id !== id);
+      localStorage.setItem("favoriteSounds", JSON.stringify(updated));
+      return updated;
+    });
   };
 
   useEffect(() => {
     fetchSound();
   }, []);
 
-  const previewUrl =
-    sound?.previews?.["preview-hq-mp3"] || sound?.previews?.["preview-lq-mp3"];
+  const previewUrl = getPreviewUrl(sound);
 
   return (
     <div className="app">
@@ -106,7 +120,7 @@ function App() {
         <p className="subtitle">Discover random audio clips</p>
 
         {loading && <p className="status">Loading sound...</p>}
-        {error && <p className="error">{error}</p>}
+        {error && !loading && <p className="error">{error}</p>}
 
         {!loading && !error && sound && (
           <div className="sound-box">
@@ -121,22 +135,30 @@ function App() {
               <span></span>
             </div>
 
-            <audio
-              ref={audioRef}
-              controls
-              src={previewUrl}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={() => setIsPlaying(false)}
-            >
-              Your browser does not support audio.
-            </audio>
+            {previewUrl ? (
+              <audio
+                ref={audioRef}
+                controls
+                src={previewUrl}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => setIsPlaying(false)}
+              >
+                Your browser does not support audio.
+              </audio>
+            ) : (
+              <p className="error">No preview available for this sound.</p>
+            )}
 
             <div className="button-row">
               <button onClick={fetchSound} disabled={loading}>
                 {loading ? "Loading..." : "New Sound"}
               </button>
-              <button onClick={saveFavorite} className="secondary-btn">
+              <button
+                onClick={saveFavorite}
+                className="secondary-btn"
+                disabled={!sound}
+              >
                 Save Favorite
               </button>
             </div>
@@ -147,34 +169,24 @@ function App() {
           <div className="favorites-box">
             <h2>Saved Favorites</h2>
 
-            {favorites.map((item) => {
-              const itemPreview =
-                item.previews?.["preview-hq-mp3"] ||
-                item.previews?.["preview-lq-mp3"];
-
-              return (
-                <div key={item.id} className="favorite-item">
-                  <div>
-                    <h3>{item.name}</h3>
-                    <p>By: {item.username}</p>
-                  </div>
-
-                  <div className="favorite-actions">
-                    <button onClick={() => playFavorite(item)}>Replay</button>
-                    <button
-                      onClick={() => removeFavorite(item.id)}
-                      className="delete-btn"
-                    >
-                      Remove
-                    </button>
-                  </div>
-
-                  <audio controls src={itemPreview}>
-                    Your browser does not support audio.
-                  </audio>
+            {favorites.map((item) => (
+              <div key={item.id} className="favorite-item">
+                <div>
+                  <h3>{item.name}</h3>
+                  <p>By: {item.username}</p>
                 </div>
-              );
-            })}
+
+                <div className="favorite-actions">
+                  <button onClick={() => playFavorite(item)}>Replay</button>
+                  <button
+                    onClick={() => removeFavorite(item.id)}
+                    className="delete-btn"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

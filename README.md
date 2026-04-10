@@ -1,16 +1,21 @@
-# React + Vite
+## API Used
+Freesound API  
+https://freesound.org/docs/api/
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## How to Run Locally
 
-Currently, two official plugins are available:
+1. Clone the repository:
+   git clone https://github.com/yourusername/random-sound-player.git
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+2. Navigate into the project:
+   cd random-sound-player
 
-## React Compiler
+3. Install dependencies:
+   npm install
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+4. Start the development server:
+   npm run dev
 
-## Expanding the ESLint configuration
+## Technical Challenge
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+One challenge I encountered was correctly accessing the audio preview from the API response. Initially, the sound would not play because I was referencing the wrong property. I resolved this by inspecting the returned JSON and using the correct field: previews["preview-hq-mp3"]. I also added checks to ensure a valid preview exists before rendering the audio player.
